@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grok Imagine 图像生成</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --surface: #1a1a1a;
+    --border: #2a2a2a;
+    --text: #e0e0e0;
+    --text-secondary: #999;
+    --accent: #10a37f;
+    --accent-hover: #0d8c6d;
+    --danger: #e74c3c;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+
+  /* ========== 顶部栏 ========== */
+  .topbar {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    gap: 16px;
+  }
+  .topbar h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    white-space: nowrap;
+    background: linear-gradient(135deg, #10a37f, #4ae0b5);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .topbar .tag {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .btn-gear {
+    width: 36px; height: 36px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  .btn-gear:hover { border-color: var(--accent); color: var(--text); }
+  .btn-gear.active { border-color: var(--accent); background: rgba(16,163,127,0.1); }
+
+  /* ========== 设置抽屉 ========== */
+  .settings-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    z-index: 500;
+  }
+  .settings-overlay.active { display: block; }
+  .settings-panel {
+    position: fixed;
+    top: 0; right: 0;
+    width: 340px; max-width: 90vw;
+    height: 100vh;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 501;
+    padding: 20px;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .settings-panel.active { transform: translateX(0); }
+  .settings-panel label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .settings-panel input,
+  .settings-panel select {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: inherit;
+    outline: none;
+  }
+  .settings-panel input:focus,
+  .settings-panel select:focus { border-color: var(--accent); }
+  .settings-panel .save-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+  .settings-panel .save-row input[type="checkbox"] { width: auto; accent-color: var(--accent); }
+
+  /* ========== 主体 ========== */
+  .main {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .card-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .ref-status {
+    font-size: 0.75rem;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  /* ------ 参考图 ------ */
+  .ref-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .ref-upload {
+    flex: 1;
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .ref-upload:hover { border-color: var(--accent); background: rgba(16,163,127,0.04); }
+  .ref-upload span { color: var(--text-secondary); font-size: 0.85rem; }
+  .ref-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .ref-thumb {
+    position: relative;
+    width: 72px; height: 72px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .ref-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .ref-thumb .del {
+    position: absolute;
+    top: 2px; right: 2px;
+    width: 18px; height: 18px;
+    background: rgba(0,0,0,0.7);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    font-size: 10px;
+    line-height: 18px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .ref-upload.hidden { display: none; }
+  .ref-status.clickable { cursor: pointer; text-decoration: underline; }
+
+  /* ------ 提示词 + 生成按钮 ------ */
+  .prompt-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+  }
+  .prompt-row textarea {
+    flex: 1;
+    padding: 12px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.95rem;
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+    min-height: 72px;
+    transition: border-color 0.2s;
+  }
+  .prompt-row textarea:focus { border-color: var(--accent); }
+  .btn-generate {
+    height: 72px;
+    padding: 0 28px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .btn-generate:hover { background: var(--accent-hover); }
+  .btn-generate:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ------ 状态 & 结果 ------ */
+  .status {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    display: none;
+  }
+  .status.error { background: rgba(231,76,60,0.15); color: #e74c3c; display: block; }
+  .status.success { background: rgba(16,163,127,0.15); color: #10a37f; display: block; }
+  .status.info { background: rgba(59,130,246,0.15); color: #60a5fa; display: block; }
+  .spinner {
+    display: none;
+    width: 26px; height: 26px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto;
+  }
+  .spinner.active { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result-area {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .result-area.active { display: flex; }
+  .result-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+  }
+  .btn-download {
+    padding: 6px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-download:hover { border-color: var(--accent); }
+  .image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .image-grid img {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .image-grid img:hover { transform: scale(1.02); }
+
+  /* 灯箱 */
+  .lightbox {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 999;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+  }
+  .lightbox.active { display: flex; }
+  .lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; }
+
+  @media (max-width: 600px) {
+    .prompt-row { flex-direction: column; }
+    .prompt-row textarea { width: 100%; min-height: 120px; }
+    .btn-generate { height: 44px; width: auto; align-self: stretch; padding: 0 20px; font-size: 0.9rem; }
+    .ref-row { flex-direction: column; }
+    .settings-panel { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ========== 顶部栏 ========== -->
+<div class="topbar">
+  <div style="display:flex;align-items:baseline;gap:8px;">
+    <h1>Grok Imagine</h1>
+    <span class="tag">OpenRouter 中转 · xAI</span>
+  </div>
+  <div class="topbar-right">
+    <button class="btn-gear" id="gearBtn" title="设置" onclick="toggleSettings()">⚙</button>
+  </div>
+</div>
+
+<!-- ========== 设置抽屉 ========== -->
+<div class="settings-overlay" id="settingsOverlay" onclick="toggleSettings()"></div>
+<div class="settings-panel" id="settingsPanel">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-weight:700;font-size:1.05rem;">⚙ 设置</span>
+    <button onclick="toggleSettings()" style="background:none;border:none;color:var(--text-secondary);font-size:1.2rem;cursor:pointer;">✕</button>
+  </div>
+  <div>
+    <label for="apiKey">API Key</label>
+    <input type="password" id="apiKey" placeholder="输入 OpenRouter API Key…" autocomplete="off">
+    <div class="save-row" style="margin-top:6px;">
+      <input type="checkbox" id="saveKey" checked>
+      <label for="saveKey">记住 API Key</label>
+    </div>
+  </div>
+  <div>
+    <label for="model">模型</label>
+    <select id="model">
+      <option value="x-ai/grok-imagine-image-quality" selected>grok-imagine-image-quality</option>
+    </select>
+  </div>
+  <div>
+    <label for="aspectRatio">宽高比</label>
+    <select id="aspectRatio">
+      <option value="auto" selected>auto · 自动</option>
+      <option value="1:1">1:1</option>
+      <option value="16:9">16:9</option>
+      <option value="9:16">9:16</option>
+      <option value="4:3">4:3</option>
+      <option value="3:4">3:4</option>
+      <option value="3:2">3:2</option>
+      <option value="2:3">2:3</option>
+      <option value="2:1">2:1</option>
+      <option value="1:2">1:2</option>
+      <option value="19.5:9">19.5:9</option>
+      <option value="9:19.5">9:19.5</option>
+      <option value="20:9">20:9</option>
+      <option value="9:20">9:20</option>
+    </select>
+  </div>
+  <div>
+    <label for="resolution">分辨率</label>
+    <select id="resolution">
+      <option value="1K" selected>1K</option>
+      <option value="2K">2K</option>
+    </select>
+  </div>
+  <div>
+    <label for="count">生成数量</label>
+    <select id="count">
+      <option value="1" selected>1 张</option>
+    </select>
+  </div>
+</div>
+
+<!-- ========== 主内容区 ========== -->
+<div class="main">
+
+  <!-- 参考图 -->
+  <div class="card" id="refCard">
+    <div class="card-label-row">
+      <span class="card-label">🖼 参考图（可选，最多 3 张）</span>
+      <span class="ref-status" id="refStatus" onclick="document.getElementById('refInput').click()"></span>
+    </div>
+    <div class="ref-row">
+      <div class="ref-upload" id="refUpload" onclick="document.getElementById('refInput').click()">
+        <span>📁 点击或拖拽上传参考图</span>
+      </div>
+      <div class="ref-thumbs" id="refThumbs"></div>
+    </div>
+    <input type="file" id="refInput" accept="image/jpeg,image/png" multiple hidden>
+  </div>
+
+  <!-- 提示词 + 生成 -->
+  <div class="card">
+    <div class="prompt-row">
+      <textarea id="prompt" placeholder="描述你想要的图像…">Generate a highly detailed photo of a girl cosplaying this illustration, at Comiket. Exactly replicate the same pose, body posture, hand gestures, facial expression, and camera framing as in the original illustration. Keep the same angle, perspective, and composition, without any deviation.保持原图衣服款式，不要修改衣服款式。人物的皮肤白皙细腻光滑没有瑕疵，微微半透明。</textarea>
+      <button class="btn-generate" id="generateBtn" onclick="generateImages()">🚀 生成</button>
+    </div>
+  </div>
+
+  <!-- 状态 -->
+  <div class="spinner" id="spinner"></div>
+  <div class="status" id="status"></div>
+
+  <!-- 结果区域 -->
+  <div class="result-area" id="resultArea">
+    <div class="result-bar">
+      <span id="resultInfo"></span>
+      <button class="btn-download" onclick="downloadAll()">⬇ 下载</button>
+    </div>
+    <div class="image-grid" id="imageGrid"></div>
+  </div>
+</div>
+
+<!-- 灯箱 -->
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('active')">
+  <img id="lightboxImg" src="" alt="预览">
+</div>
+
+<script>
+const API_BASE = 'https://openrouter.ai/api/v1/images';
+let refImages = [];
+
+// ========== 设置面板 ==========
+function toggleSettings() {
+  document.getElementById('settingsOverlay').classList.toggle('active');
+  document.getElementById('settingsPanel').classList.toggle('active');
+  document.getElementById('gearBtn').classList.toggle('active');
+}
+
+// 加载 Key
+const savedKey = localStorage.getItem('xai_api_key');
+if (savedKey) {
+  document.getElementById('apiKey').value = savedKey;
+  document.getElementById('saveKey').checked = true;
+}
+document.getElementById('saveKey').addEventListener('change', function() {
+  if (!this.checked) localStorage.removeItem('xai_api_key');
+});
+
+// ========== 参考图上传 ==========
+const refUpload = document.getElementById('refUpload');
+const refInput = document.getElementById('refInput');
+refInput.addEventListener('change', () => {
+  handleRefFiles(Array.from(refInput.files));
+  refInput.value = '';
+});
+
+function handleRefFiles(files) {
+  const available = 3 - refImages.length;
+  if (available <= 0) {
+    showStatus('⚠️ 最多 3 张参考图', 'error');
+    return;
+  }
+  files.slice(0, available).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => { refImages.push(reader.result); renderRefThumbs(); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderRefThumbs() {
+  refThumbs.innerHTML = '';
+  refImages.forEach((dataUrl, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ref-thumb';
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    const del = document.createElement('button');
+    del.className = 'del'; del.textContent = '✕';
+    del.onclick = (e) => { e.stopPropagation(); refImages.splice(i, 1); renderRefThumbs(); };
+    wrap.appendChild(img); wrap.appendChild(del);
+    refThumbs.appendChild(wrap);
+  });
+  const hasImages = refImages.length > 0;
+  refUpload.classList.toggle('hidden', hasImages);
+  const statusEl = document.getElementById('refStatus');
+  statusEl.textContent = hasImages ? `已选 ${refImages.length}/3 张 · 继续添加` : '';
+  statusEl.classList.toggle('clickable', hasImages);
+}
+
+// ========== 生成图像 ==========
+async function generateImages() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const prompt = document.getElementById('prompt').value.trim();
+  const model = document.getElementById('model').value;
+  const aspectRatio = document.getElementById('aspectRatio').value;
+  const resolution = document.getElementById('resolution').value;
+  const n = parseInt(document.getElementById('count').value);
+
+  const statusEl = document.getElementById('status');
+  const spinnerEl = document.getElementById('spinner');
+  const resultArea = document.getElementById('resultArea');
+  const imageGrid = document.getElementById('imageGrid');
+  const resultInfo = document.getElementById('resultInfo');
+  const generateBtn = document.getElementById('generateBtn');
+
+  if (!apiKey) { showStatus('请先在设置中填写 API Key', 'error'); toggleSettings(); return; }
+  if (!prompt) { showStatus('请输入提示词', 'error'); return; }
+
+  if (document.getElementById('saveKey').checked) localStorage.setItem('xai_api_key', apiKey);
+
+  generateBtn.disabled = true;
+  spinnerEl.classList.add('active');
+  statusEl.className = 'status';
+  statusEl.textContent = '';
+  resultArea.classList.remove('active');
+  imageGrid.innerHTML = '';
+
+  try {
+    showStatus('📡 正在向 OpenRouter 发送请求…', 'info');
+
+    const reqBody = { model, prompt, n, aspect_ratio: aspectRatio, resolution };
+    if (refImages.length > 0) {
+      reqBody.input_references = refImages.map(dataUrl => ({
+        type: 'image_url',
+        image_url: { url: dataUrl }
+      }));
+    }
+
+    const response = await fetch(API_BASE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': window.location.origin || 'http://localhost',
+        'X-Title': 'Grok Imagine Image Generator'
+      },
+      body: JSON.stringify(reqBody)
+    });
+
+    showStatus('⏳ 正在等待 xAI 生成图像…（通常需要 5–15 秒）', 'info');
+
+    const data = await response.json();
+
+    if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}: 请求失败`);
+
+    const images = data.data || [];
+    if (images.length === 0) throw new Error('API 未返回任何图像');
+
+    images.forEach(img => {
+      const b64 = img.b64_json || '';
+      const mt = img.media_type || 'image/png';
+      const src = b64.startsWith('data:') ? b64 : `data:${mt};base64,${b64}`;
+      const el = document.createElement('img');
+      el.src = src;
+      el.alt = '生成图像';
+      el.loading = 'lazy';
+      el.addEventListener('click', () => {
+        document.getElementById('lightboxImg').src = src;
+        document.getElementById('lightbox').classList.add('active');
+      });
+      imageGrid.appendChild(el);
+    });
+
+    resultArea.classList.add('active');
+    resultInfo.textContent = `"${prompt.slice(0, 50)}${prompt.length > 50 ? '…' : ''}" · ${resolution} · ${aspectRatio}`;
+    showStatus(`✅ 生成完成`, 'success');
+
+  } catch (err) {
+    showStatus(`❌ ${err.message}`, 'error');
+    console.error(err);
+  } finally {
+    generateBtn.disabled = false;
+    spinnerEl.classList.remove('active');
+  }
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = `status ${type}`;
+}
+
+async function downloadAll() {
+  const imgs = document.querySelectorAll('#imageGrid img');
+  if (imgs.length === 0) return;
+  showStatus('📥 正在下载…', 'info');
+  for (let i = 0; i < imgs.length; i++) {
+    try {
+      const blob = await fetch(imgs[i].src).then(r => r.blob());
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `grok-imagine-${Date.now()}-${i + 1}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      await new Promise(r => setTimeout(r, 300));
+    } catch (e) {
+      window.open(imgs[i].src, '_blank');
+    }
+  }
+  showStatus('✅ 下载完成', 'success');
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    generateImages();
+  }
+});
+</script>
+</body>
+</html>
